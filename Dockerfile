@@ -1,18 +1,17 @@
 # ==========================================
 # Multi-stage Dockerfile for Next.js 16 (Standalone)
+# Base: Debian Bookworm Slim for 100% glibc & native package compatibility
 # ==========================================
 
-# Base image with Node 22 Alpine
-FROM node:22-alpine AS base
+FROM node:22-bookworm-slim AS base
+WORKDIR /app
 
 # Stage 1: Dependencies
 FROM base AS deps
-RUN apk add --no-cache libc6-compat
 WORKDIR /app
-
-# Copy dependency manifests
 COPY package.json package-lock.json* ./
-RUN npm ci || npm install
+# Use --legacy-peer-deps to avoid React 19 peer dependency conflicts
+RUN npm install --legacy-peer-deps --ignore-scripts
 
 # Stage 2: Builder
 FROM base AS builder
@@ -20,9 +19,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Next.js telemetry disable
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+ENV NODE_OPTIONS="--max-old-space-size=2048"
 
 # Pass build-time environment variables for Next.js client bundling
 ARG NEXT_PUBLIC_SUPABASE_URL=https://aglfqnppqnhdbrugupjg.supabase.co
@@ -33,7 +32,6 @@ ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
 ENV NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 ENV NEXT_PUBLIC_BOT_API_URL=$NEXT_PUBLIC_BOT_API_URL
 
-# Build Next.js application
 RUN npm run build
 
 # Stage 3: Runner
@@ -45,9 +43,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Create unprivileged user
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
+# Create non-root user
+RUN groupadd --system --gid 1001 nodejs && \
+    useradd --system --uid 1001 -g nodejs nextjs
 
 # Copy static assets and public files
 COPY --from=builder /app/public ./public
