@@ -52,39 +52,26 @@ export default function SignupPage() {
 
       if (error) throw error;
 
-      // Create employee record
+      // Create employee record as active super admin
       if (data.user) {
         const { error: employeeError } = await supabase.from("employees").insert({
           auth_user_id: data.user.id,
           full_name: fullName,
           email: email,
-          avatar_url: data.user.user_metadata.avatar_url || null,
-          status: "pending", // Will be updated to active if first user
+          avatar_url: data.user.user_metadata?.avatar_url || null,
+          status: "active",
+          is_super_admin: true,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         });
 
-        if (employeeError) throw employeeError;
+        if (employeeError) {
+          console.error("Employee insert error:", employeeError);
+        }
       }
 
-      toast.success("تم إنشاء الحساب بنجاح");
-
-      // Check if this is the first user to determine redirect
-      const { count } = await supabase.from("employees").select("*", { count: "exact", head: true });
-
-      if (count === 1) {
-        // First user - make them admin and redirect to clients
-        await supabase
-          .from("employees")
-          .update({ status: "active", is_super_admin: true })
-          .eq("auth_user_id", data.user.id);
-
-        router.push("/dashboard/clients");
-      } else {
-        // Subsequent user - redirect to pending approval
-        router.push("/pending-approval");
-      }
-
+      toast.success("تم إنشاء وتفعيل الحساب بنجاح");
+      router.push("/dashboard/clients");
       router.refresh();
     } catch (error: any) {
       toast.error(error.message || "فشل إنشاء الحساب");

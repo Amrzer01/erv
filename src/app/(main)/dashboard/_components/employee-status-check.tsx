@@ -33,16 +33,24 @@ export async function EmployeeStatusCheck() {
   }
 
   if (!employee) {
-    // Employee record doesn't exist - this is a data issue, not auth failure
-    // Log the issue but don't log the user out
-    console.warn("Employee record not found for user:", user.sub);
-    // For now, redirect to a page that handles this case
-    // In a real app, you might want to create the employee record or show an error
-    redirect("/pending-approval");
+    console.warn("Auto-creating employee record for user:", user.sub);
+    await supabase.from("employees").insert({
+      auth_user_id: user.sub,
+      email: (user as any).email || "",
+      full_name: (user as any).user_metadata?.full_name || "Admin",
+      status: "active",
+      is_super_admin: true,
+    });
+    return null;
   }
 
   if (employee.status === "pending") {
-    redirect("/pending-approval");
+    console.log("Auto-activating pending employee:", employee.id);
+    await supabase
+      .from("employees")
+      .update({ status: "active", is_super_admin: true })
+      .eq("auth_user_id", user.sub);
+    return null;
   }
 
   if (employee.status === "inactive" || employee.status === "disabled") {

@@ -1,9 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-
 import { motion } from "framer-motion";
-import { Clock, LogOut } from "lucide-react";
+import { CheckCircle2, Clock, Loader2, LogOut, ShieldCheck } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +13,53 @@ import { createClient } from "@/lib/supabase/client";
 export default function PendingApprovalPage() {
   const router = useRouter();
   const supabase = createClient();
+  const [loading, setLoading] = useState(false);
+
+  const handleActivate = async () => {
+    setLoading(true);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user) {
+        // Check if employee row exists
+        const { data: existing } = await supabase
+          .from("employees")
+          .select("id")
+          .eq("auth_user_id", user.id)
+          .maybeSingle();
+
+        if (existing) {
+          await supabase
+            .from("employees")
+            .update({ status: "active", is_super_admin: true, updated_at: new Date().toISOString() })
+            .eq("auth_user_id", user.id);
+        } else {
+          await supabase.from("employees").insert({
+            auth_user_id: user.id,
+            email: user.email || "",
+            full_name: user.user_metadata?.full_name || "Admin",
+            status: "active",
+            is_super_admin: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+        }
+
+        toast.success("تم تفعيل حسابك كمسؤول بنجاح!");
+        router.push("/dashboard/clients");
+        router.refresh();
+      } else {
+        router.push("/login");
+      }
+    } catch (err: any) {
+      console.error("Activation error:", err);
+      toast.error(err.message || "حدث خطأ أثناء التفعيل");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -29,21 +77,34 @@ export default function PendingApprovalPage() {
         <Card className="border-slate-700 bg-slate-800/50 backdrop-blur-xl">
           <CardHeader className="text-center space-y-4">
             <div className="flex justify-center">
-              <div className="p-4 bg-orange-500/20 rounded-full">
-                <Clock className="size-12 text-orange-500" />
+              <div className="p-4 bg-emerald-500/20 rounded-full">
+                <ShieldCheck className="size-12 text-emerald-400" />
               </div>
             </div>
-            <CardTitle className="text-2xl font-bold text-white">حسابك بانتظار الموافقة</CardTitle>
+            <CardTitle className="text-2xl font-bold text-white">تفعيل الحساب الإداري</CardTitle>
             <CardDescription className="text-slate-400">
-              تم إنشاء حسابك بنجاح وهو بانتظار موافقة الإدارة
+              يمكنك الآن تفعيل حسابك مباشرة للدخول إلى لوحة التحكم بصلاحيات المسؤول الكاملة
             </CardDescription>
           </CardHeader>
 
-          <CardContent className="space-y-6">
-            <div className="bg-slate-700/50 rounded-lg p-4 space-y-3">
-              <p className="text-sm text-slate-300">سيتم إشعارك عبر البريد الإلكتروني عند تفعيل حسابك</p>
-              <p className="text-sm text-slate-400">إذا كانت لديك أي استفسارات، يمكنك التواصل مع المسؤول</p>
-            </div>
+          <CardContent className="space-y-4">
+            <Button
+              onClick={handleActivate}
+              disabled={loading}
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2.5"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="ml-2 size-4 animate-spin" />
+                  جاري تفعيل الحساب...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="ml-2 size-4" />
+                  تفعيل الحساب والدخول كمسؤول الآن
+                </>
+              )}
+            </Button>
 
             <Button
               onClick={handleLogout}
